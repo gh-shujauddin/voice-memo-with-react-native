@@ -3,16 +3,35 @@ import React, { useState, useEffect } from "react";
 import { FontAwesome5 } from '@expo/vector-icons';
 import { AVPlaybackStatus, Audio } from "expo-av";
 import { Sound } from "expo-av/build/Audio";
-import Animated, { useAnimatedStyle, withTiming } from "react-native-reanimated";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, withTiming } from "react-native-reanimated";
 
-const MemoListItem = ({ uri }: { uri: string }) => {
+export type Memo = {
+  uri: string;
+  metering: number[];
+}
+
+const MemoListItem = ({ memo }: { memo: Memo }) => {
   const [sound, setSound] = useState<Sound>();
   const [status, setStatus] = useState<AVPlaybackStatus>();
 
+
+  let lines = [];
+  let numLines = 50;
+
+  for (let i = 0; i < numLines; i++) {
+    const meteringIndex = Math.floor((i * memo.metering.length) / numLines);
+    const nextMeteringIndex = Math.ceil(
+      ((i + 1) * memo.metering.length) / numLines
+    );
+    const values = memo.metering.slice(meteringIndex, nextMeteringIndex);
+    const average = values.reduce((sum, a) => sum + a, 0) / values.length;
+    lines.push(average);
+
+  }
   async function loadSound() {
     console.log('Loading Sound');
     const { sound } = await Audio.Sound.createAsync(
-      { uri: uri },
+      { uri: memo.uri },
       { progressUpdateIntervalMillis: 1000 / 60 },
       onPlaybackStatusUpdate
     );
@@ -22,7 +41,7 @@ const MemoListItem = ({ uri }: { uri: string }) => {
 
   useEffect(() => {
     loadSound();
-  }, [uri]);
+  }, [memo]);
 
   const onPlaybackStatusUpdate = async (newStatus: AVPlaybackStatus) => {
     setStatus(newStatus);
@@ -64,12 +83,12 @@ const MemoListItem = ({ uri }: { uri: string }) => {
   const position = status?.isLoaded ? status.positionMillis : 0;
   const duration = status?.isLoaded ? status.durationMillis : 1;
 
-  const progress = position / duration;
-
-  const animatedIndicatorStyle = useAnimatedStyle(() => ({
-    left: `${progress * 100}%`
-    // left: withTiming(`${progress * 100}%`, { duration: 100 }),
-  }))
+  const progress = position / (duration ?? 1);
+  
+  // const animatedIndicatorStyle = useAnimatedStyle(() => ({
+  //   left: `${progress * 100}%`
+  //   // left: withTiming(`${progress * 100}%`, { duration: 100 }),
+  // }))
   return (
     <View style={styles.container}>
       <FontAwesome5
@@ -78,8 +97,21 @@ const MemoListItem = ({ uri }: { uri: string }) => {
         color={'grey'}
         size={20} />
       <View style={styles.playbackContainer}>
-        <View style={styles.playbackBackground} />
-        <Animated.View style={[styles.playbackIndicator, animatedIndicatorStyle]} />
+        {/* <View style={styles.playbackBackground} /> */}
+
+        <View style={styles.wave}>
+          {lines.map((db, index) => (
+            <View
+              style={[styles.waveLine,
+              {
+                height: interpolate(db, [-60, 0], [5, 50], Extrapolation.CLAMP),
+                backgroundColor: progress > index / lines.length ? 'royalblue' : 'gainsboro',
+              }]}
+            />
+          ))}
+        </View>
+
+        {/* <Animated.View style={[styles.playbackIndicator, animatedIndicatorStyle]} /> */}
         <Text
           style={{
             position: 'absolute',
@@ -89,7 +121,7 @@ const MemoListItem = ({ uri }: { uri: string }) => {
             fontFamily: 'InterSemi',
             fontSize: 12
           }}>
-          {formatMillis(position || 0)} / {formatMillis(duration || 0)}</Text>
+          {formatMillis(position ?? 0)} / {formatMillis(duration ?? 0)}</Text>
       </View>
     </View>
   );
@@ -118,7 +150,7 @@ const styles = StyleSheet.create({
   },
   playbackContainer: {
     flex: 1,
-    height: 50,
+    height: 70,
     justifyContent: 'center',
 
   },
@@ -135,6 +167,18 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'absolute',
 
-  }
+  },
+  wave: {
+    flexDirection: 'row',
+    gap: 3,
+    alignItems: 'center',
+  },
+  waveLine: {
+    flex: 1,
+    height: 30,
+    backgroundColor: 'gainsboro',
+    borderRadius: 20,
+
+  },
 });
 export default MemoListItem;
